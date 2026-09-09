@@ -18,7 +18,9 @@
 
 package org.finos.waltz.web.endpoints.api;
 
+import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.service.change_initiative.ChangeInitiativeService;
+import org.finos.waltz.service.user.UserRoleService;
 import org.finos.waltz.web.DatumRoute;
 import org.finos.waltz.web.ListRoute;
 import org.finos.waltz.web.endpoints.Endpoint;
@@ -31,7 +33,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import spark.Request;
 
+import java.io.IOException;
+
 import static org.finos.waltz.common.Checks.checkNotNull;
+import static org.finos.waltz.web.WebUtilities.requireEditRoleForEntity;
 
 
 @Service
@@ -40,13 +45,17 @@ public class ChangeInitiativeEndpoint implements Endpoint {
     private static final String BASE_URL = WebUtilities.mkPath("api", "change-initiative");
 
     private final ChangeInitiativeService service;
+    private final UserRoleService userRoleService;
 
 
     @Autowired
-    public ChangeInitiativeEndpoint(ChangeInitiativeService service) {
+    public ChangeInitiativeEndpoint(ChangeInitiativeService service,
+                                    UserRoleService userRoleService) {
         checkNotNull(service, "service cannot be null");
+        checkNotNull(userRoleService, "userRoleService cannot be null");
 
         this.service = service;
+        this.userRoleService = userRoleService;
     }
 
 
@@ -96,8 +105,22 @@ public class ChangeInitiativeEndpoint implements Endpoint {
     }
 
 
-    private Boolean changeEntityRelationship(Request request) throws java.io.IOException {
-        EntityRelationshipChangeCommand command = WebUtilities.readBody(request, EntityRelationshipChangeCommand.class);
+    private Boolean changeEntityRelationship(Request request) throws IOException {
+        return changeEntityRelationship(
+                request,
+                WebUtilities.readBody(request, EntityRelationshipChangeCommand.class));
+    }
+
+
+    Boolean changeEntityRelationship(Request request,
+                                     EntityRelationshipChangeCommand command) {
+        requireEditRoleForEntity(
+                userRoleService,
+                request,
+                EntityKind.CHANGE_INITIATIVE,
+                command.operation(),
+                command.entityReference().kind());
+
         switch (command.operation()) {
             case ADD:
                 return service.addEntityRelationship(WebUtilities.getId(request), command, WebUtilities.getUsername(request));
