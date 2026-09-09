@@ -25,6 +25,7 @@ import org.finos.waltz.model.Operation;
 import org.finos.waltz.model.external_identifier.ExternalIdentifier;
 import org.finos.waltz.service.external_identifier.ExternalIdentifierService;
 import org.finos.waltz.service.permission.permission_checker.FlowPermissionChecker;
+import org.finos.waltz.service.user.UserRoleService;
 import org.finos.waltz.web.DatumRoute;
 import org.finos.waltz.web.ListRoute;
 import org.finos.waltz.web.WebUtilities;
@@ -32,12 +33,14 @@ import org.finos.waltz.web.endpoints.Endpoint;
 import org.finos.waltz.web.endpoints.EndpointUtilities;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import spark.Request;
 
 import java.util.Set;
 
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.model.EntityKind.LOGICAL_DATA_FLOW;
 import static org.finos.waltz.web.WebUtilities.getUsername;
+import static org.finos.waltz.web.WebUtilities.requireEditRoleForEntity;
 
 
 @Service
@@ -46,16 +49,20 @@ public class ExternalIdentifierEndpoint implements Endpoint {
     private static final String BASE_URL = WebUtilities.mkPath("api", "external-identifier");
     private final ExternalIdentifierService externalIdentifierService;
     private final FlowPermissionChecker flowPermissionChecker;
+    private final UserRoleService userRoleService;
 
 
     @Autowired
     public ExternalIdentifierEndpoint(ExternalIdentifierService externalIdentifierService,
-                                      FlowPermissionChecker flowPermissionChecker) {
+                                      FlowPermissionChecker flowPermissionChecker,
+                                      UserRoleService userRoleService) {
         checkNotNull(externalIdentifierService, "externalIdentifierService cannot be null");
         checkNotNull(flowPermissionChecker, "flowPermissionChecker cannot be null");
+        checkNotNull(userRoleService, "userRoleService cannot be null");
 
         this.externalIdentifierService = externalIdentifierService;
         this.flowPermissionChecker = flowPermissionChecker;
+        this.userRoleService = userRoleService;
     }
 
     @Override
@@ -67,22 +74,9 @@ public class ExternalIdentifierEndpoint implements Endpoint {
         };
 
 
-        DatumRoute<Integer> deleteRoute = (req, resp) -> {
-            EntityReference ref = WebUtilities.getEntityReference(req);
-            String system = req.params("system");
-            String externalId = req.splat()[0];
+        DatumRoute<Integer> deleteRoute = (req, resp) -> delete(req);
 
-            checkHasPermission(ref, getUsername(req));
-
-            return externalIdentifierService.delete(ref, externalId, system, getUsername(req));
-        };
-
-        DatumRoute<Integer> createRoute = (req, resp) -> {
-            EntityReference ref = WebUtilities.getEntityReference(req);
-            String externalId = req.splat()[0];
-            checkHasPermission(ref, getUsername(req));
-            return externalIdentifierService.create(ref, externalId, getUsername(req));
-        };
+        DatumRoute<Integer> createRoute = (req, resp) -> create(req);
 
 
         // delete
@@ -94,10 +88,41 @@ public class ExternalIdentifierEndpoint implements Endpoint {
     }
 
 
-    private void checkHasPermission(EntityReference ref, String username) throws InsufficientPrivelegeException {
+    Integer delete(Request req) throws InsufficientPrivelegeException {
+        EntityReference ref = WebUtilities.getEntityReference(req);
+        String system = req.params("system");
+        String externalId = req.splat()[0];
+
+        checkHasPermission(req, ref, Operation.REMOVE);
+
+        return externalIdentifierService.delete(ref, externalId, system, getUsername(req));
+    }
+
+
+    Integer create(Request req) throws InsufficientPrivelegeException {
+        EntityReference ref = WebUtilities.getEntityReference(req);
+        String externalId = req.splat()[0];
+
+        checkHasPermission(req, ref, Operation.ADD);
+
+        return externalIdentifierService.create(ref, externalId, getUsername(req));
+    }
+
+
+    private void checkHasPermission(Request req,
+                                    EntityReference ref,
+                                    Operation operation) throws InsufficientPrivelegeException {
+        String username = getUsername(req);
         if (ref.kind().equals(LOGICAL_DATA_FLOW)) {
             Set<Operation> permissions = flowPermissionChecker.findPermissionsForFlow(ref.id(), username);
             flowPermissionChecker.verifyEditPerms(permissions, EntityKind.EXTERNAL_IDENTIFIER, username);
+        } else {
+            requireEditRoleForEntity(
+                    userRoleService,
+                    req,
+                    ref.kind(),
+                    operation,
+                    EntityKind.EXTERNAL_IDENTIFIER);
         }
     }
 }
