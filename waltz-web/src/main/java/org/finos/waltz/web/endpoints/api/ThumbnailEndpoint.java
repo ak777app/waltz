@@ -19,27 +19,37 @@
 package org.finos.waltz.web.endpoints.api;
 
 import org.finos.waltz.service.thumbnail.ThumbnailService;
+import org.finos.waltz.service.user.UserRoleService;
 import org.finos.waltz.web.WebUtilities;
 import org.finos.waltz.web.endpoints.Endpoint;
 import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.Operation;
 import org.finos.waltz.model.thumbnail.ThumbnailSaveCommand;
 import org.finos.waltz.web.endpoints.EndpointUtilities;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import spark.Request;
+
+import java.io.IOException;
 
 import static org.finos.waltz.common.Checks.checkNotNull;
+import static org.finos.waltz.web.WebUtilities.requireEditRoleForEntity;
 
 @Service
 public class ThumbnailEndpoint implements Endpoint {
 
     private final String BASE_URL = WebUtilities.mkPath("api", "thumbnail");
     private final ThumbnailService thumbnailService;
+    private final UserRoleService userRoleService;
 
 
     @Autowired
-    public ThumbnailEndpoint(ThumbnailService thumbnailService) {
+    public ThumbnailEndpoint(ThumbnailService thumbnailService,
+                             UserRoleService userRoleService) {
         checkNotNull(thumbnailService, "thumbnailService cannot be null");
+        checkNotNull(userRoleService, "userRoleService cannot be null");
         this.thumbnailService = thumbnailService;
+        this.userRoleService = userRoleService;
     }
 
 
@@ -55,15 +65,39 @@ public class ThumbnailEndpoint implements Endpoint {
         });
 
 
-        EndpointUtilities.deleteForDatum(byRefPath, (req, res) -> {
-            EntityReference entityRef = WebUtilities.getEntityReference(req);
-            return thumbnailService.deleteByReference(entityRef, WebUtilities.getUsername(req));
-        });
+        EndpointUtilities.deleteForDatum(byRefPath, (req, res) -> delete(req));
+
+        EndpointUtilities.postForDatum(savePath, (req, res) -> save(req));
+    }
 
 
-        EndpointUtilities.postForDatum(savePath, (req, res) -> {
-            thumbnailService.save(WebUtilities.readBody(req, ThumbnailSaveCommand.class), WebUtilities.getUsername(req));
-            return true;
-        });
+    boolean delete(Request req) {
+        EntityReference entityRef = WebUtilities.getEntityReference(req);
+        checkHasPermission(req, entityRef, Operation.REMOVE);
+        return thumbnailService.deleteByReference(entityRef, WebUtilities.getUsername(req));
+    }
+
+
+    boolean save(Request req) throws IOException {
+        return save(req, WebUtilities.readBody(req, ThumbnailSaveCommand.class));
+    }
+
+
+    boolean save(Request req, ThumbnailSaveCommand cmd) {
+        checkHasPermission(req, cmd.parentEntityReference(), Operation.UPDATE);
+        thumbnailService.save(cmd, WebUtilities.getUsername(req));
+        return true;
+    }
+
+
+    private void checkHasPermission(Request req,
+                                    EntityReference ref,
+                                    Operation operation) {
+        requireEditRoleForEntity(
+                userRoleService,
+                req,
+                ref.kind(),
+                operation,
+                null);
     }
 }
