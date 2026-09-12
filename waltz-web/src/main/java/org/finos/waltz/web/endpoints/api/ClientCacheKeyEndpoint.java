@@ -19,14 +19,17 @@
 package org.finos.waltz.web.endpoints.api;
 
 import org.finos.waltz.service.client_cache_key.ClientCacheKeyService;
+import org.finos.waltz.service.user.UserRoleService;
 import org.finos.waltz.web.DatumRoute;
 import org.finos.waltz.web.ListRoute;
 import org.finos.waltz.web.endpoints.Endpoint;
 import org.finos.waltz.model.client_cache_key.ClientCacheKey;
+import org.finos.waltz.model.user.SystemRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import static org.finos.waltz.web.WebUtilities.mkPath;
+import static org.finos.waltz.web.WebUtilities.requireRole;
 import static org.finos.waltz.web.endpoints.EndpointUtilities.*;
 
 
@@ -36,11 +39,14 @@ public class ClientCacheKeyEndpoint implements Endpoint {
     private static final String BASE_URL = mkPath("api", "client-cache-key");
 
     private final ClientCacheKeyService clientCacheKeyService;
+    private final UserRoleService userRoleService;
 
 
     @Autowired
-    public ClientCacheKeyEndpoint(ClientCacheKeyService clientCacheKeyService) {
+    public ClientCacheKeyEndpoint(ClientCacheKeyService clientCacheKeyService,
+                                  UserRoleService userRoleService) {
         this.clientCacheKeyService = clientCacheKeyService;
+        this.userRoleService = userRoleService;
     }
 
 
@@ -58,6 +64,7 @@ public class ClientCacheKeyEndpoint implements Endpoint {
         };
 
         DatumRoute<ClientCacheKey> createOrUpdateRoute = (req, res) -> {
+            requireRole(userRoleService, req, SystemRole.ADMIN);
             String key = req.params("key");
             return clientCacheKeyService.createOrUpdate(key);
         };
