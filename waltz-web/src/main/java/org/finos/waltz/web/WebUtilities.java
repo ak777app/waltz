@@ -172,6 +172,16 @@ public class WebUtilities {
     }
 
 
+    public static String requireAuthenticatedUser(Request request) {
+        String user = getUsername(request);
+        if (StringUtilities.isEmpty(user) || AuthenticationUtilities.isAnonymous(request)) {
+            LOG.warn("Authenticated user required for: " + request.pathInfo());
+            throw new NotAuthorizedException("Not logged in");
+        }
+        return user;
+    }
+
+
     /**
      * Expect parameter to be called: <code>kind</code>
      * @param request Http request

@@ -175,6 +175,7 @@ public class AuthenticationEndpoint implements Endpoint {
         }, WebUtilities.transformer);
 
         Spark.before(WebUtilities.mkPath("api", "*"), filter);
+        Spark.before(WebUtilities.mkPath("data-extract", "*"), filter);
 
     }
 
