@@ -1,32 +1,31 @@
 # Test coverage (JaCoCo)
 
-The root `pom.xml` binds `jacoco-maven-plugin` (`prepare-agent` + `report`) to every module.
-Each module that runs tests writes `target/jacoco.exec` and an HTML/XML/CSV report under
-`target/site/jacoco/`.
+The root `pom.xml` binds `jacoco-maven-plugin` to every module:
 
-Because `waltz-integration-test` is a separate module, its execution data is produced in a
-separate `jacoco.exec` from the unit-test modules. Reporting each exec file against the
-production class directories lets us attribute coverage to unit tests vs integration tests.
+- `prepare-agent` writes **unit-test** execution data to `target/jacoco-unit.exec`, and `report`
+  (bound to `test`) renders it to `target/site/jacoco/` (HTML/XML/CSV) for that module's own classes.
+- `waltz-integration-test` overrides this: its agent writes `target/jacoco-it.exec` and, instead of
+  `report`, runs `report-aggregate` over its production dependencies (`waltz-common`, `waltz-model`,
+  `waltz-data`, `waltz-service`) using **only** the `jacoco-it.exec` data, producing
+  `waltz-integration-test/target/site/jacoco-it/`.
+
+Because the two test types write differently-named exec files, unit and integration coverage stay
+separate even when both run in the same reactor build.
 
 ## Reproducing the numbers
 
 ```
-# 1. unit tests (waltz-common, waltz-model, waltz-data, waltz-service, waltz-web, ...)
+# unit coverage per module -> <module>/target/site/jacoco/index.html
 mvn -s .build.settings.xml -Pbuild-postgres,waltz-postgres -pl '!waltz-integration-test' -Dskip.npm=true clean test
-mkdir -p /tmp/cov/unit && for m in waltz-common waltz-model waltz-data waltz-service waltz-web; do cp $m/target/jacoco.exec /tmp/cov/unit/$m.exec; done
 
-# 2. integration tests (module must run inside the reactor, so unit tests are re-run here)
+# integration coverage over waltz-common/model/data/service -> waltz-integration-test/target/site/jacoco-it/index.html
+# (-am is required: the module must build inside the reactor; upstream unit tests re-run but land in jacoco-unit.exec)
 mvn -s .build.settings.xml -Pbuild-postgres,waltz-postgres -pl waltz-integration-test -am -Dskip.npm=true test
-cp waltz-integration-test/target/jacoco.exec /tmp/cov/it.exec
-
-# 3. report each exec set against a module's classes (JaCoCo CLI, version matches ${jacoco.version})
-CLI=~/.m2/repository/org/jacoco/org.jacoco.cli/0.8.12/org.jacoco.cli-0.8.12-nodeps.jar
-mvn dependency:get -Dartifact=org.jacoco:org.jacoco.cli:0.8.12:jar:nodeps
-for m in waltz-common waltz-model waltz-data waltz-service waltz-web; do
-  java -jar $CLI report /tmp/cov/unit/*.exec --classfiles $m/target/classes --sourcefiles $m/src/main/java --html /tmp/cov/unit-$m --csv /tmp/cov/unit-$m.csv
-  java -jar $CLI report /tmp/cov/it.exec       --classfiles $m/target/classes --sourcefiles $m/src/main/java --html /tmp/cov/it-$m   --csv /tmp/cov/it-$m.csv
-done
 ```
+
+For a merged view or line-level unit-vs-integration attribution, feed both exec sets to the JaCoCo
+CLI (`org.jacoco:org.jacoco.cli:${jacoco.version}:jar:nodeps`), e.g.
+`java -jar org.jacoco.cli-nodeps.jar report */target/jacoco-unit.exec waltz-integration-test/target/jacoco-it.exec --classfiles waltz-service/target/classes --xml merged.xml`.
 
 ## Results (commit at time of writing, JDK 17, Maven 3.6.3)
 
