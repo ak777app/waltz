@@ -123,24 +123,30 @@ public class SurveyInstanceExtractor implements DataExtractor {
 
     private void registerRunBasedExtract() {
         get(WebUtilities.mkPath(BASE_URL, "run-id", ":id"),
-            (request, response) -> writeReportResults(
+            (request, response) -> {
+                WebUtilities.requireAuthenticatedUser(request);
+                return writeReportResults(
                     response,
                     prepareInstancesOfRun(
                             parseExtractFormat(request),
                             WebUtilities.getId(request),
-                            parseStatuses(request))));
+                            parseStatuses(request)));
+            });
     }
 
 
 
     private void registerTemplateBasedExtract() {
         get(WebUtilities.mkPath(BASE_URL, "template-id", ":id"),
-            (request, response) -> writeReportResults(
+            (request, response) -> {
+                WebUtilities.requireAuthenticatedUser(request);
+                return writeReportResults(
                     response,
                     prepareInstancesOfTemplate(
                         parseExtractFormat(request),
                         WebUtilities.getId(request),
-                        parseStatuses(request))));
+                        parseStatuses(request)));
+            });
     }
 
 
